@@ -83,12 +83,45 @@ func (s *MemoryStore) Get(key string, out interface{}) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	if v, ok := s.store[key]; ok {
-		vl := reflect.ValueOf(out).Elem()
-		if !vl.CanSet() {
-			return errors.New("out cannot set")
+		outv := reflect.ValueOf(out)
+		switch outv.Kind() {
+		case reflect.Ptr:
+			outt := outv.Type().Elem()
+			vv := reflect.ValueOf(v)
+			if outv.IsNil() {
+				outv.Set(reflect.New(outt))
+			}
+
+			outv = outv.Elem()
+			if outt.Kind() == vv.Kind() {
+				outv.Set(vv)
+				return nil
+			}
+
+			if vv.Kind() == reflect.Ptr && outt.Kind() == vv.Elem().Kind() {
+				outv.Set(vv.Elem())
+				return nil
+			}
+			return errors.New(fmt.Sprintf("Cannot set out type %T with value type %T", out, v))
+
+		case reflect.Map:
+			outt := outv.Type()
+			vv := reflect.ValueOf(v)
+			vvt := vv.Type()
+			if vvt.Kind() == reflect.Map && vvt.Key().Kind() == outt.Key().Kind() {
+				keys := vv.MapKeys()
+				for _,k := range keys {
+					outv.SetMapIndex(k,vv.MapIndex(k))
+				}
+				return nil
+			}
+			return errors.New(fmt.Sprintf("Cannot set out type %T with value type %T", out, v))
+
+		case reflect.Struct:
+			return errors.New("Can't deal with struct values. Use a pointer.")
+		default:
+			return errors.New("Needs a map or a pointer to a struct.")
 		}
-		vl.Set(reflect.ValueOf(v).Elem())
-		return nil
 	}
 	return ErrNotExist
 }
