@@ -71,18 +71,26 @@ func (s *RedisStore) TTL(key string) (int64) {
 func (s *RedisStore) Put(key string, value interface{}) (err error) {
 	key = s.domain + key
 	var data interface{}
-	switch reflect.TypeOf(value).Kind() {
-	case reflect.Struct, reflect.Map, reflect.Slice:
-		{
+	val := reflect.TypeOf(value)
+
+	for  {
+		kd := val.Kind()
+		if kd == reflect.Struct || kd ==  reflect.Map || kd == reflect.Slice {
 			data, err = bson.Marshal(value)
 			if err != nil {
 				log.Fatal(err)
 				return err
 			}
+			break
+		} else if kd == reflect.Ptr {
+			val = val.Elem()
+			continue
+		} else {
+			data = value
+			break
 		}
-	default:
-		data = value
 	}
+
 
 	ReTry:
 	conn := s.pool.Get()
